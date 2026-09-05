@@ -192,6 +192,7 @@ function App() {
   const [tab, setTab] = useState("fleet");        // fleet | repairs | costs | due
   const [vehicles, setVehicles] = useState([]);
   const [repairs, setRepairs] = useState([]);
+  const [insYears, setInsYears] = useState([]);   // ประวัติประกันรายปี
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [detailId, setDetailId] = useState(null);  // ดูรถรายคัน
@@ -202,14 +203,16 @@ function App() {
   async function loadAll() {
     if (!supabase) { setErr("ยังไม่ได้ตั้งค่า Supabase (supabase-config.js)"); setLoading(false); return; }
     setLoading(true);
-    const [v, r] = await Promise.all([
+    const [v, r, iy] = await Promise.all([
       supabase.from("vehicles").select("*").order("code", { ascending: true, nullsFirst: false }),
       supabase.from("vehicle_repairs").select("*").order("repair_date", { ascending: false }),
+      supabase.from("vehicle_insurance_years").select("*").order("year", { ascending: true }),
     ]);
     if (v.error) setErr("โหลดข้อมูลรถไม่สำเร็จ: " + v.error.message);
     else setVehicles(v.data || []);
     if (r.error) setErr("โหลดประวัติซ่อมไม่สำเร็จ: " + r.error.message);
     else setRepairs(r.data || []);
+    if (!iy.error) setInsYears(iy.data || []);
     setLoading(false);
   }
   useEffect(() => { loadAll(); }, []);
@@ -239,6 +242,11 @@ function App() {
   }, [repairsByVeh]);
 
   const vehById = useMemo(() => Object.fromEntries(vehicles.map((v) => [v.id, v])), [vehicles]);
+  const insByVeh = useMemo(() => {
+    const m = {};
+    insYears.forEach((y) => { (m[y.vehicle_id] = m[y.vehicle_id] || []).push(y); });
+    return m;
+  }, [insYears]);
   const vehLabel = (v) => (v.code ? v.code + " · " : "") + (v.plate || "") + (v.name ? " (" + v.name + ")" : "");
 
   // ---------- บันทึก/ลบ ----------
@@ -313,6 +321,7 @@ function App() {
 
       {detailVeh ? (
         <VehicleDetail veh={detailVeh} repairs={repairsByVeh[detailVeh.id] || []} repeatFlags={repeatFlags}
+          insHistory={insByVeh[detailVeh.id] || []}
           onReload={loadAll}
           onBack={() => setDetailId(null)}
           onEdit={() => setShowVehForm(detailVeh)}
@@ -404,38 +413,64 @@ function FleetTab({ vehicles, repairsByVeh, q, setQ, onOpen, onAdd }) {
   );
 }
 
+// ชิพเล็กๆ ใช้ในการ์ดรถ
+function Chip({ children, tone }) {
+  const tones = {
+    farm: { background: "#f6eddb", color: "#8a6d3b" },
+    group: { background: "#fff", color: "#9b917f", border: "1px solid #e5dbc9" },
+    internal: { background: "#eef3e6", color: "#6b7f52" },
+  };
+  return <span style={{ ...tones[tone || "group"], borderRadius: 999, padding: "1px 9px", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>{children}</span>;
+}
+
 function VehicleCard({ v, reps, onOpen }) {
   const last = reps[0];
   const totalYear = reps.filter((r) => monthKey(r.repair_date).slice(0, 4) === todayStr().slice(0, 4))
     .reduce((s, r) => s + (Number(r.cost) || 0), 0);
+  const spec = [[v.brand, v.model, v.year].filter(Boolean).join(" "), v.color && "สี" + v.color, v.name]
+    .filter(Boolean).join(" · ");
+  const hasDue = [v.tax_due, v.act_due, v.insurance_due].some((d) => { const dd = daysUntil(d); return dd !== null && dd <= DUE_SOON_DAYS; });
   return (
-    <div style={{ ...S.card, cursor: "pointer" }} onClick={onOpen}>
+    <div style={{ ...S.card, cursor: "pointer", display: "flex", flexDirection: "column", gap: 8 }} onClick={onOpen}>
+      {/* บรรทัด 1: รูป + เบอร์รถ + ป้ายทะเบียน */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {v.photo_front ? (
-          <img src={v.photo_front} alt="" style={{ width: 38, height: 38, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: "1px solid #e5dbc9" }} />
+          <img src={v.photo_front} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: "1px solid #e5dbc9" }} />
         ) : (
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: v.has_docs === false ? "#8fae72" : "#5a4b3a", display: "grid", placeItems: "center", color: "#fff", flexShrink: 0 }}>
-            {v.has_docs === false ? <Car size={21} /> : <Truck size={21} />}
+          <div style={{ width: 44, height: 44, borderRadius: 10, background: v.has_docs === false ? "#8fae72" : "#5a4b3a", display: "grid", placeItems: "center", color: "#fff", flexShrink: 0 }}>
+            {v.has_docs === false ? <Car size={23} /> : <Truck size={23} />}
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, color: "#4c4335", fontSize: 15.5 }}>
+          <div style={{ fontWeight: 800, color: "#4c4335", fontSize: 16 }}>
             {v.code && <span style={{ color: "#E8943A" }}>{v.code} · </span>}<Plate text={v.plate} />
           </div>
-          <div style={{ fontSize: 13, color: "#9b917f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {[v.farm && "📍" + v.farm, v.vgroup !== v.farm && v.vgroup, v.name, v.brand, v.model].filter(Boolean).join(" · ") || "-"}
+          {/* บรรทัด 2: ชิพ ฟาร์ม/หมวด/สถานะ */}
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
+            {v.farm && <Chip tone="farm">📍{v.farm}</Chip>}
+            {v.vgroup && v.vgroup !== v.farm && <Chip>{v.vgroup}</Chip>}
+            {v.has_docs === false && <Chip tone="internal">ใช้ภายใน</Chip>}
           </div>
         </div>
-        {v.has_docs === false && <span style={{ background: "#f3ecdf", color: "#9b917f", borderRadius: 999, padding: "2px 8px", fontSize: 11.5, fontWeight: 700, flexShrink: 0 }}>ใช้ภายใน</span>}
       </div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-        <DueBadge label="ทะเบียน" date={v.tax_due} />
-        <DueBadge label="พ.ร.บ." date={v.act_due} />
-        <DueBadge label="ประกัน" date={v.insurance_due} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 13, color: "#7a6f5c" }}>
+      {/* บรรทัด 3: ยี่ห้อ/สี/ชื่อเรียก */}
+      {spec && (
+        <div style={{ fontSize: 13, color: "#9b917f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {spec}
+        </div>
+      )}
+      {/* บรรทัด 4: ป้ายเตือนวันครบกำหนด (โชว์เฉพาะที่ใกล้/เลยกำหนด) */}
+      {hasDue && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <DueBadge label="ทะเบียน" date={v.tax_due} />
+          <DueBadge label="พ.ร.บ." date={v.act_due} />
+          <DueBadge label="ประกัน" date={v.insurance_due} />
+        </div>
+      )}
+      {/* บรรทัด 5: สรุปซ่อม */}
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#7a6f5c", borderTop: "1px dashed #f0e8d9", paddingTop: 7, marginTop: "auto" }}>
         <span><Wrench size={13} style={{ verticalAlign: -2 }} /> {last ? "ซ่อมล่าสุด " + fmtDate(last.repair_date) : "ยังไม่มีประวัติซ่อม"}</span>
-        <span style={{ fontWeight: 700 }}>ปีนี้ {THB(totalYear)} ฿</span>
+        <span style={{ fontWeight: 700, color: totalYear > 0 ? "#4c4335" : "#b0a691" }}>ปีนี้ {THB(totalYear)} ฿</span>
       </div>
     </div>
   );
@@ -444,7 +479,7 @@ function VehicleCard({ v, reps, onOpen }) {
 // ============================================================
 // หน้ารถรายคัน
 // ============================================================
-function VehicleDetail({ veh, repairs, repeatFlags, onReload, onBack, onEdit, onAddRepair, onEditRepair, onDelRepair, onToggleActive }) {
+function VehicleDetail({ veh, repairs, repeatFlags, insHistory, onReload, onBack, onEdit, onAddRepair, onEditRepair, onDelRepair, onToggleActive }) {
   const total = repairs.reduce((s, r) => s + (Number(r.cost) || 0), 0);
   const byCat = {};
   repairs.forEach((r) => {
@@ -490,6 +525,37 @@ function VehicleDetail({ veh, repairs, repeatFlags, onReload, onBack, onEdit, on
             {(veh.insurance_value || veh.insurance_premium) && <tr><td style={{ color: "#9b917f" }}>ทุน/เบี้ยประกัน</td><td>{[veh.insurance_value && "ทุน " + THB(veh.insurance_value) + " ฿", veh.insurance_premium && "เบี้ย " + THB(veh.insurance_premium) + " ฿/ปี"].filter(Boolean).join(" · ")}</td></tr>}
             {(veh.renew_at || veh.insurance_renew_at) && <tr><td style={{ color: "#9b917f" }}>ต่อที่</td><td>{[veh.renew_at && "ภาษี/พรบ: " + veh.renew_at, veh.insurance_renew_at && "ประกัน: " + veh.insurance_renew_at].filter(Boolean).join(" · ")}</td></tr>}
           </tbody></table>
+          {insHistory && insHistory.length > 0 && (
+            <div style={{ marginTop: 10, borderTop: "1px dashed #eee4d5", paddingTop: 8 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#9b917f", marginBottom: 4 }}>📊 ประวัติประกันรายปี</div>
+              <table style={{ fontSize: 13, color: "#4c4335", lineHeight: 1.8, width: "100%" }}>
+                <thead><tr style={{ color: "#b0a691", fontSize: 12 }}>
+                  <td>ปี</td><td>หมดอายุ</td><td style={{ textAlign: "right" }}>ทุน</td><td style={{ textAlign: "right" }}>เบี้ย</td>
+                </tr></thead>
+                <tbody>
+                  {insHistory.map((y, i) => {
+                    const prev = i > 0 ? insHistory[i - 1] : null;
+                    const diff = prev && prev.premium && y.premium ? Number(y.premium) - Number(prev.premium) : null;
+                    return (
+                      <tr key={y.year}>
+                        <td style={{ fontWeight: 700 }}>{y.year}</td>
+                        <td>{fmtDate(y.expire_date)}</td>
+                        <td style={{ textAlign: "right" }}>{y.sum_insured ? THB(y.sum_insured) : "-"}</td>
+                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                          {y.premium ? THB(y.premium) : "-"}
+                          {diff !== null && diff !== 0 && (
+                            <span style={{ fontSize: 11.5, fontWeight: 700, marginLeft: 4, color: diff > 0 ? "#b4451f" : "#3d7a3d" }}>
+                              {diff > 0 ? "▲" : "▼"}{THB(Math.abs(diff))}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
         <div style={S.card}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#9b917f", marginBottom: 6 }}>สรุปการซ่อม ({repairs.length} ครั้ง · รวม {THB(total)} ฿)</div>
