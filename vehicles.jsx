@@ -246,6 +246,8 @@ function App() {
     const row = { ...form };
     ["tax_due", "act_due", "insurance_due"].forEach((k) => { if (!row[k]) row[k] = null; });
     row.year = row.year ? Number(row.year) : null;
+    row.insurance_value = row.insurance_value ? Number(row.insurance_value) : null;
+    row.insurance_premium = row.insurance_premium ? Number(row.insurance_premium) : null;
     let res;
     if (row.id) res = await supabase.from("vehicles").update(row).eq("id", row.id);
     else { delete row.id; res = await supabase.from("vehicles").insert(row); }
@@ -473,6 +475,7 @@ function VehicleDetail({ veh, repairs, repeatFlags, onReload, onBack, onEdit, on
             {veh.vgroup && <tr><td style={{ color: "#9b917f" }}>หมวดรถ</td><td>{veh.vgroup}</td></tr>}
             <tr><td style={{ color: "#9b917f" }}>ชื่อเรียก</td><td>{veh.name || "-"}</td></tr>
             <tr><td style={{ color: "#9b917f" }}>ยี่ห้อ/รุ่น</td><td>{[veh.brand, veh.model, veh.year].filter(Boolean).join(" ") || "-"}</td></tr>
+            {veh.color && <tr><td style={{ color: "#9b917f" }}>สีรถ</td><td>{veh.color}</td></tr>}
             {veh.owner_name && <tr><td style={{ color: "#9b917f" }}>จดนาม/ผู้ใช้</td><td>{veh.owner_name}</td></tr>}
             {veh.vin && <tr><td style={{ color: "#9b917f" }}>เลขตัวถัง</td><td style={{ fontSize: 12.5 }}>{veh.vin}</td></tr>}
             {veh.notes && <tr><td style={{ color: "#9b917f", verticalAlign: "top" }}>หมายเหตุ</td><td>{veh.notes}</td></tr>}
@@ -484,6 +487,7 @@ function VehicleDetail({ veh, repairs, repeatFlags, onReload, onBack, onEdit, on
             <tr><td style={{ color: "#9b917f", paddingRight: 14 }}><FileText size={14} style={{ verticalAlign: -2 }} /> ต่อทะเบียน</td><td>{fmtDate(veh.tax_due)} <DueBadge label="" date={veh.tax_due} /></td></tr>
             <tr><td style={{ color: "#9b917f" }}><ShieldCheck size={14} style={{ verticalAlign: -2 }} /> พ.ร.บ.</td><td>{fmtDate(veh.act_due)} <DueBadge label="" date={veh.act_due} /></td></tr>
             <tr><td style={{ color: "#9b917f" }}><ShieldCheck size={14} style={{ verticalAlign: -2 }} /> ประกันภัย</td><td>{fmtDate(veh.insurance_due)} <DueBadge label="" date={veh.insurance_due} />{veh.insurance_company ? " · " + veh.insurance_company : ""}{veh.insurance_phone ? " ☎" + veh.insurance_phone : ""}</td></tr>
+            {(veh.insurance_value || veh.insurance_premium) && <tr><td style={{ color: "#9b917f" }}>ทุน/เบี้ยประกัน</td><td>{[veh.insurance_value && "ทุน " + THB(veh.insurance_value) + " ฿", veh.insurance_premium && "เบี้ย " + THB(veh.insurance_premium) + " ฿/ปี"].filter(Boolean).join(" · ")}</td></tr>}
             {(veh.renew_at || veh.insurance_renew_at) && <tr><td style={{ color: "#9b917f" }}>ต่อที่</td><td>{[veh.renew_at && "ภาษี/พรบ: " + veh.renew_at, veh.insurance_renew_at && "ประกัน: " + veh.insurance_renew_at].filter(Boolean).join(" · ")}</td></tr>}
           </tbody></table>
         </div>
@@ -734,6 +738,7 @@ function VehicleForm({ init, onSave, onClose }) {
     id: init.id || null, code: init.code || "", plate: init.plate || "", name: init.name || "",
     vtype: init.vtype || "heavy", brand: init.brand || "", model: init.model || "", year: init.year || "",
     farm: init.farm || "", vgroup: init.vgroup || "", vin: init.vin || "", owner_name: init.owner_name || "",
+    color: init.color || "", insurance_value: init.insurance_value || "", insurance_premium: init.insurance_premium || "",
     renew_at: init.renew_at || "", insurance_renew_at: init.insurance_renew_at || "",
     insurance_phone: init.insurance_phone || "", has_docs: init.has_docs !== false,
     tax_due: init.tax_due || "", act_due: init.act_due || "", insurance_due: init.insurance_due || "",
@@ -770,6 +775,7 @@ function VehicleForm({ init, onSave, onClose }) {
         <Field label="รุ่น"><input style={S.input} placeholder="FTR" value={f.model} onChange={set("model")} /></Field>
         <Field label="ปีรถ"><input style={S.input} type="number" placeholder="2560" value={f.year} onChange={set("year")} /></Field>
       </div>
+      <Field label="สีรถ"><input style={S.input} placeholder="เช่น ขาว / เทา" value={f.color} onChange={set("color")} /></Field>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 10px" }}>
         <Field label="จดนาม/เล่มรถ หรือ ผู้ใช้"><input style={S.input} placeholder="เช่น บจ.เอสเจเอฟ / ช่างต้า" value={f.owner_name} onChange={set("owner_name")} /></Field>
         <Field label="เลขตัวถัง"><input style={S.input} value={f.vin} onChange={set("vin")} /></Field>
@@ -780,6 +786,8 @@ function VehicleForm({ init, onSave, onClose }) {
         <Field label="🛡️ ครบกำหนดประกันภัย"><input style={S.input} type="date" value={f.insurance_due} onChange={set("insurance_due")} /></Field>
         <Field label="บริษัทประกัน"><input style={S.input} placeholder="เช่น วิริยะ" value={f.insurance_company} onChange={set("insurance_company")} /></Field>
         <Field label="เบอร์ประกัน"><input style={S.input} placeholder="เช่น 1557" value={f.insurance_phone} onChange={set("insurance_phone")} /></Field>
+        <Field label="ทุนประกัน (บาท)"><input style={S.input} type="number" placeholder="เช่น 800000" value={f.insurance_value} onChange={set("insurance_value")} /></Field>
+        <Field label="เบี้ยประกัน (บาท/ปี)"><input style={S.input} type="number" placeholder="เช่น 30000" value={f.insurance_premium} onChange={set("insurance_premium")} /></Field>
         <Field label="ต่อภาษี/พรบ ที่"><input style={S.input} placeholder="เช่น ไทรงาม / เจ้ต๊ะ" value={f.renew_at} onChange={set("renew_at")} /></Field>
         <Field label="ต่อประกันที่"><input style={S.input} placeholder="เช่น ไทรงาม" value={f.insurance_renew_at} onChange={set("insurance_renew_at")} /></Field>
       </div>
