@@ -502,8 +502,8 @@ function VehicleDetail({ veh, repairs, repeatFlags, insHistory, onReload, onBack
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 10, marginBottom: 14 }}>
-        <div style={S.card}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#9b917f", marginBottom: 6 }}>ข้อมูลรถ</div>
+        <div style={{ ...S.card, borderLeft: "4px solid #E8943A" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: "#b46a1f", marginBottom: 6 }}>🚚 ข้อมูลรถ</div>
           <table style={{ fontSize: 14, color: "#4c4335", lineHeight: 1.9 }}><tbody>
             <tr><td style={{ color: "#9b917f", paddingRight: 14 }}>เอกสาร</td><td>{veh.has_docs === false ? "🚜 ใช้ภายใน (ไม่มีเอกสาร)" : "📄 มีเอกสาร (จดทะเบียน)"}</td></tr>
             {veh.farm && <tr><td style={{ color: "#9b917f" }}>ที่ตั้ง/ฟาร์ม</td><td>📍{veh.farm}</td></tr>}
@@ -516,49 +516,68 @@ function VehicleDetail({ veh, repairs, repeatFlags, insHistory, onReload, onBack
             {veh.notes && <tr><td style={{ color: "#9b917f", verticalAlign: "top" }}>หมายเหตุ</td><td>{veh.notes}</td></tr>}
           </tbody></table>
         </div>
-        <div style={S.card}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#9b917f", marginBottom: 6 }}>ทะเบียน · พ.ร.บ. · ประกันภัย</div>
-          <table style={{ fontSize: 14, color: "#4c4335", lineHeight: 1.9 }}><tbody>
-            <tr><td style={{ color: "#9b917f", paddingRight: 14 }}><FileText size={14} style={{ verticalAlign: -2 }} /> ต่อทะเบียน</td><td>{fmtDate(veh.tax_due)} <DueBadge label="" date={veh.tax_due} /></td></tr>
-            <tr><td style={{ color: "#9b917f" }}><ShieldCheck size={14} style={{ verticalAlign: -2 }} /> พ.ร.บ.</td><td>{fmtDate(veh.act_due)} <DueBadge label="" date={veh.act_due} /></td></tr>
-            <tr><td style={{ color: "#9b917f" }}><ShieldCheck size={14} style={{ verticalAlign: -2 }} /> ประกันภัย</td><td>{fmtDate(veh.insurance_due)} <DueBadge label="" date={veh.insurance_due} />{veh.insurance_company ? " · " + veh.insurance_company : ""}{veh.insurance_phone ? " ☎" + veh.insurance_phone : ""}</td></tr>
-            {(veh.insurance_value || veh.insurance_premium) && <tr><td style={{ color: "#9b917f" }}>ทุน/เบี้ยประกัน</td><td>{[veh.insurance_value && "ทุน " + THB(veh.insurance_value) + " ฿", veh.insurance_premium && "เบี้ย " + THB(veh.insurance_premium) + " ฿/ปี"].filter(Boolean).join(" · ")}</td></tr>}
-            {(veh.renew_at || veh.insurance_renew_at) && <tr><td style={{ color: "#9b917f" }}>ต่อที่</td><td>{[veh.renew_at && "ภาษี/พรบ: " + veh.renew_at, veh.insurance_renew_at && "ประกัน: " + veh.insurance_renew_at].filter(Boolean).join(" · ")}</td></tr>}
-          </tbody></table>
-          {insHistory && insHistory.length > 0 && (
-            <div style={{ marginTop: 10, borderTop: "1px dashed #eee4d5", paddingTop: 8 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#9b917f", marginBottom: 4 }}>📊 ประวัติประกันรายปี</div>
-              <table style={{ fontSize: 13, color: "#4c4335", lineHeight: 1.8, width: "100%" }}>
-                <thead><tr style={{ color: "#b0a691", fontSize: 12 }}>
-                  <td>ปี</td><td>หมดอายุ</td><td style={{ textAlign: "right" }}>ทุน</td><td style={{ textAlign: "right" }}>เบี้ย</td>
-                </tr></thead>
-                <tbody>
-                  {insHistory.map((y, i) => {
-                    const prev = i > 0 ? insHistory[i - 1] : null;
-                    const diff = prev && prev.premium && y.premium ? Number(y.premium) - Number(prev.premium) : null;
-                    return (
-                      <tr key={y.year}>
-                        <td style={{ fontWeight: 700 }}>{y.year}</td>
-                        <td>{fmtDate(y.expire_date)}</td>
-                        <td style={{ textAlign: "right" }}>{y.sum_insured ? THB(y.sum_insured) : "-"}</td>
-                        <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                          {y.premium ? THB(y.premium) : "-"}
-                          {diff !== null && diff !== 0 && (
-                            <span style={{ fontSize: 11.5, fontWeight: 700, marginLeft: 4, color: diff > 0 ? "#b4451f" : "#3d7a3d" }}>
-                              {diff > 0 ? "▲" : "▼"}{THB(Math.abs(diff))}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {/* กรอบ 1: ต่อทะเบียน/ภาษี */}
+          <div style={{ ...S.card, padding: 12, borderLeft: "4px solid #c9a227", background: "#fffdf5" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: "#8a6d3b", marginBottom: 4 }}>📄 ต่อทะเบียน / ภาษี</div>
+            <div style={{ fontSize: 14.5, color: "#4c4335" }}>{fmtDate(veh.tax_due)} <DueBadge label="" date={veh.tax_due} /></div>
+            {veh.renew_at && <div style={{ fontSize: 12.5, color: "#9b917f", marginTop: 2 }}>ต่อที่: {veh.renew_at}</div>}
+          </div>
+          {/* กรอบ 2: พ.ร.บ. */}
+          <div style={{ ...S.card, padding: 12, borderLeft: "4px solid #7fa8c9", background: "#f8fbfd" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: "#3d6a8a", marginBottom: 4 }}>🛡️ พ.ร.บ.</div>
+            <div style={{ fontSize: 14.5, color: "#4c4335" }}>{fmtDate(veh.act_due)} <DueBadge label="" date={veh.act_due} /></div>
+            {veh.renew_at && <div style={{ fontSize: 12.5, color: "#9b917f", marginTop: 2 }}>ต่อที่: {veh.renew_at}</div>}
+          </div>
+          {/* กรอบ 3: ประกันภัย */}
+          <div style={{ ...S.card, padding: 12, borderLeft: "4px solid #8fae72", background: "#f9fcf5" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: "#5d7a42", marginBottom: 4 }}>🚗 ประกันภัย</div>
+            <div style={{ fontSize: 14.5, color: "#4c4335" }}>{fmtDate(veh.insurance_due)} <DueBadge label="" date={veh.insurance_due} /></div>
+            <div style={{ fontSize: 12.5, color: "#9b917f", marginTop: 2 }}>
+              {[veh.insurance_company, veh.insurance_phone && "☎" + veh.insurance_phone, veh.insurance_renew_at && "ต่อที่: " + veh.insurance_renew_at].filter(Boolean).join(" · ")}
             </div>
-          )}
+            {(veh.insurance_value || veh.insurance_premium) && (
+              <div style={{ fontSize: 13.5, color: "#4c4335", marginTop: 4, fontWeight: 600 }}>
+                {[veh.insurance_value && "ทุน " + THB(veh.insurance_value) + " ฿", veh.insurance_premium && "เบี้ย " + THB(veh.insurance_premium) + " ฿/ปี"].filter(Boolean).join(" · ")}
+              </div>
+            )}
+            {insHistory && insHistory.length > 0 && (
+              <div style={{ marginTop: 8, borderTop: "1px dashed #e5ecd9", paddingTop: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#9b917f", marginBottom: 3 }}>📊 ประวัติรายปี</div>
+                <div style={{ overflowX: "auto" }}>
+                <table style={{ fontSize: 12.5, color: "#4c4335", lineHeight: 1.8, width: "100%" }}>
+                  <thead><tr style={{ color: "#b0a691", fontSize: 12 }}>
+                    <td>ปี</td><td>หมดอายุ</td><td style={{ textAlign: "right" }}>ทุน</td><td style={{ textAlign: "right" }}>เบี้ย</td>
+                  </tr></thead>
+                  <tbody>
+                    {insHistory.map((y, i) => {
+                      const prev = i > 0 ? insHistory[i - 1] : null;
+                      const diff = prev && prev.premium && y.premium ? Number(y.premium) - Number(prev.premium) : null;
+                      return (
+                        <tr key={y.year}>
+                          <td style={{ fontWeight: 700 }}>{y.year}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>{fmtDate(y.expire_date)}</td>
+                          <td style={{ textAlign: "right" }}>{y.sum_insured ? THB(y.sum_insured) : "-"}</td>
+                          <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                            {y.premium ? THB(y.premium) : "-"}
+                            {diff !== null && diff !== 0 && (
+                              <span style={{ fontSize: 11.5, fontWeight: 700, marginLeft: 4, color: diff > 0 ? "#b4451f" : "#3d7a3d" }}>
+                                {diff > 0 ? "▲" : "▼"}{THB(Math.abs(diff))}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        <div style={S.card}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#9b917f", marginBottom: 6 }}>สรุปการซ่อม ({repairs.length} ครั้ง · รวม {THB(total)} ฿)</div>
+        <div style={{ ...S.card, borderLeft: "4px solid #d9787a" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: "#a84e50", marginBottom: 6 }}>🔧 สรุปการซ่อม ({repairs.length} ครั้ง · รวม {THB(total)} ฿)</div>
           {catRows.length === 0 ? <div style={{ fontSize: 14, color: "#9b917f" }}>ยังไม่มีประวัติซ่อม</div> :
             catRows.map(([c, x]) => (
               <div key={c} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, lineHeight: 1.9 }}>
