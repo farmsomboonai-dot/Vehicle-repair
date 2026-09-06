@@ -159,6 +159,21 @@ function Plate({ text, size }) {
   );
 }
 
+// 🔶 กรอบรหัสรถภายใน — กรอบส้ม ให้ต่างจากป้ายทะเบียนจริง (กรอบขาวขอบดำ) จะได้ไม่สับสน
+function CodeBadge({ code, size }) {
+  if (!code) return null;
+  const big = size === "big";
+  return (
+    <span style={{
+      display: "inline-block", background: "#fff4e2", color: "#b46a1f",
+      border: "2px solid #E8943A", borderRadius: big ? 8 : 6,
+      padding: big ? "2px 12px" : "0px 8px", fontWeight: 800,
+      fontSize: big ? "inherit" : "0.95em", lineHeight: 1.5, whiteSpace: "nowrap",
+      verticalAlign: -1, marginRight: 6,
+    }}>{code}</span>
+  );
+}
+
 // ป้ายเตือนวันครบกำหนด
 function DueBadge({ label, date }) {
   const dd = daysUntil(date);
@@ -443,7 +458,7 @@ function VehicleCard({ v, reps, onOpen }) {
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 800, color: "#4c4335", fontSize: 16 }}>
-            {v.code && <span style={{ color: "#E8943A" }}>{v.code} · </span>}<Plate text={v.plate} />
+            <CodeBadge code={v.code} /><Plate text={v.plate} />
           </div>
           {/* บรรทัด 2: ชิพ ฟาร์ม/หมวด/สถานะ */}
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
@@ -494,7 +509,7 @@ function VehicleDetail({ veh, repairs, repeatFlags, insHistory, onReload, onBack
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
         <button style={S.btnGhost} onClick={onBack}><ChevronLeft size={16} /> กลับ</button>
         <div style={{ flex: 1, fontSize: 18, fontWeight: 800, color: "#4c4335" }}>
-          {veh.code && <span style={{ color: "#E8943A" }}>{veh.code} · </span>}<Plate text={veh.plate} size="big" />
+          <CodeBadge code={veh.code} size="big" /><Plate text={veh.plate} size="big" />
           {!veh.active && <span style={{ fontSize: 13, color: "#b4451f", marginLeft: 8 }}>(เลิกใช้งาน)</span>}
         </div>
         <button style={S.btnGhost} onClick={onEdit}><Pencil size={15} /> แก้ไขข้อมูลรถ</button>
@@ -607,7 +622,19 @@ function VehicleDetail({ veh, repairs, repeatFlags, insHistory, onReload, onBack
   );
 }
 
-function RepairRow({ r, repeatPrev, vehName, onEdit, onDel, onOpenVeh }) {
+// 🏷️ จับตัวเลขราคา (ลงท้าย ฿) ใส่ป้ายแยกจากข้อความ — กันเลข 2 ชุดติดกันแล้วอ่านผิด
+function PriceText({ text }) {
+  if (!text) return null;
+  const segs = String(text).split(/([\d,]+(?:\.\d+)?\s*฿)/g);
+  return segs.map((seg, i) =>
+    /^[\d,]+(?:\.\d+)?\s*฿$/.test(seg) ? (
+      <span key={i} style={{ background: "#fdf6e3", border: "1px solid #e3d5ae", borderRadius: 6, padding: "0 6px", margin: "0 3px", fontWeight: 700, color: "#8a6d3b", whiteSpace: "nowrap" }}>🏷️{seg}</span>
+    ) : (
+      seg
+    ));
+}
+
+function RepairRow({ r, repeatPrev, veh, showVeh, onEdit, onDel, onOpenVeh }) {
   return (
     <div style={{ ...S.card, borderLeft: r.status === "pending" ? "4px solid #E8943A" : repeatPrev ? "4px solid #d9534f" : "4px solid #dfd6c4" }}>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -616,9 +643,15 @@ function RepairRow({ r, repeatPrev, vehName, onEdit, onDel, onOpenVeh }) {
             {fmtDate(r.repair_date)}
             {r.category && <span style={{ background: "#f3ecdf", borderRadius: 999, padding: "2px 10px", fontSize: 12.5, fontWeight: 700, color: "#7a6f5c", marginLeft: 8 }}>{r.category}</span>}
             {r.status === "pending" && <span style={{ background: "#fff4e2", color: "#b46a1f", borderRadius: 999, padding: "2px 10px", fontSize: 12.5, fontWeight: 700, marginLeft: 6 }}>⏳ กำลังซ่อม</span>}
-            {vehName && <span style={{ color: "#E8943A", marginLeft: 8, cursor: onOpenVeh ? "pointer" : "default", fontSize: 13.5 }} onClick={onOpenVeh}>{vehName}</span>}
+            {showVeh && (veh ? (
+              <span style={{ marginLeft: 8, cursor: "pointer", fontSize: 13.5, whiteSpace: "nowrap" }} onClick={onOpenVeh}>
+                🚚 <CodeBadge code={veh.code} /><Plate text={(veh.plate || "").split(/[\(（\/]/)[0].trim()} />
+              </span>
+            ) : (
+              <span style={{ color: "#9b917f", marginLeft: 8, fontSize: 13.5 }}>(ไม่พบรถ)</span>
+            ))}
           </div>
-          <div style={{ fontSize: 14.5, color: "#4c4335", marginTop: 4 }}><b>ซ่อม/เปลี่ยน:</b> {r.parts}</div>
+          <div style={{ fontSize: 14.5, color: "#4c4335", marginTop: 4, lineHeight: 1.9 }}><b>ซ่อม/เปลี่ยน:</b> <PriceText text={r.parts} /></div>
           {r.cause && <div style={{ fontSize: 13.5, color: "#7a6f5c", marginTop: 2 }}><b>สาเหตุ:</b> {r.cause}</div>}
           <div style={{ fontSize: 12.5, color: "#9b917f", marginTop: 3 }}>
             {r.mileage ? <span><Gauge size={12} style={{ verticalAlign: -2 }} /> {THB(r.mileage)} กม. · </span> : null}
@@ -679,7 +712,7 @@ function RepairsTab({ repairs, vehById, vehLabel, repeatFlags, onAdd, onEdit, on
         {list.map((r) => {
           const v = vehById[r.vehicle_id];
           return <RepairRow key={r.id} r={r} repeatPrev={repeatFlags[r.id]}
-            vehName={v ? "🚚 " + vehLabel(v) : "(ไม่พบรถ)"}
+            veh={v} showVeh={true}
             onOpenVeh={() => v && onOpenVeh(v.id)}
             onEdit={() => onEdit(r)} onDel={() => onDel(r)} />;
         })}
@@ -744,7 +777,7 @@ function CostsTab({ repairs, vehById, vehLabel, onOpenVeh }) {
                 onClick={() => v && onOpenVeh(vid)}>
                 <span style={{ fontSize: 14.5, color: "#4c4335" }}>
                   <b style={{ color: i === 0 ? "#b4451f" : "#9b917f", marginRight: 8 }}>#{i + 1}</b>
-                  {v ? vehLabel(v) : "(ไม่พบรถ)"} <span style={{ color: "#9b917f" }}>· {x.n} รายการ</span>
+                  {v ? <><CodeBadge code={v.code} /><Plate text={(v.plate || "").split(/[\(（\/]/)[0].trim()} /></> : "(ไม่พบรถ)"} <span style={{ color: "#9b917f" }}>· {x.n} รายการ</span>
                 </span>
                 <b style={{ color: "#4c4335" }}>{THB(x.cost)} ฿</b>
               </div>
@@ -929,7 +962,7 @@ function RepairForm({ init, vehicles, vehLabel, repairsByVeh, onSave, onClose })
           <b style={{ color: "#b46a1f" }}>📌 ประวัติ{f.category ? "หมวด " + f.category : ""}ของรถคันนี้:</b>
           {history.map((r) => (
             <div key={r.id} style={{ color: "#7a6f5c", marginTop: 3 }}>
-              • {fmtDate(r.repair_date)} — {r.parts}{r.cause ? " (สาเหตุ: " + r.cause + ")" : ""} · {THB(r.cost)} ฿
+              • {fmtDate(r.repair_date)} — <PriceText text={r.parts} />{r.cause ? " (สาเหตุ: " + r.cause + ")" : ""} · {THB(r.cost)} ฿
             </div>
           ))}
         </div>
