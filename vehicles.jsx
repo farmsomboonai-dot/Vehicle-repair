@@ -151,8 +151,8 @@ function Plate({ text, size }) {
         display: "inline-block", background: "#fff", color: "#2b2b2b",
         border: "2px solid #2b2b2b", borderRadius: big ? 8 : 6,
         boxShadow: "inset 0 0 0 1.5px #fff, inset 0 0 0 2.5px #d9d2c2",
-        padding: big ? "2px 12px" : "0px 8px", fontWeight: 800,
-        fontSize: big ? "inherit" : "0.95em", lineHeight: 1.5, whiteSpace: "nowrap", verticalAlign: -1,
+        padding: big ? "3px 14px" : "2px 12px", fontWeight: 800,
+        fontSize: big ? "inherit" : "1em", lineHeight: 1.5, whiteSpace: "nowrap", verticalAlign: -1,
       }}>{plate}</span>
       {rest && <span style={{ fontWeight: 600, color: "#7a6f5c", fontSize: "0.9em" }}>{rest}</span>}
     </>
@@ -457,8 +457,9 @@ function VehicleCard({ v, reps, onOpen }) {
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, color: "#4c4335", fontSize: 16 }}>
-            <CodeBadge code={v.code} /><Plate text={v.plate} />
+          <div style={{ fontSize: 10.5, color: "#b0a691", fontWeight: 700, marginBottom: 2 }}>ทะเบียนรถ</div>
+          <div style={{ fontWeight: 800, color: "#4c4335", fontSize: 17.5 }}>
+            <Plate text={v.plate} />
           </div>
           {/* บรรทัด 2: ชิพ ฟาร์ม/หมวด/สถานะ */}
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5 }}>
@@ -467,6 +468,13 @@ function VehicleCard({ v, reps, onOpen }) {
             {v.has_docs === false && <Chip tone="internal">ใช้ภายใน</Chip>}
           </div>
         </div>
+        {/* รหัสรถภายใน — แยกไว้มุมขวาบน */}
+        {v.code && (
+          <div style={{ alignSelf: "flex-start", textAlign: "center", flexShrink: 0 }}>
+            <div style={{ fontSize: 10.5, color: "#b0a691", fontWeight: 700, marginBottom: 1 }}>รหัสรถ</div>
+            <CodeBadge code={v.code} />
+          </div>
+        )}
       </div>
       {/* บรรทัด 3: ยี่ห้อ/สี/ชื่อเรียก */}
       {spec && (
@@ -509,9 +517,16 @@ function VehicleDetail({ veh, repairs, repeatFlags, insHistory, onReload, onBack
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
         <button style={S.btnGhost} onClick={onBack}><ChevronLeft size={16} /> กลับ</button>
         <div style={{ flex: 1, fontSize: 18, fontWeight: 800, color: "#4c4335" }}>
-          <CodeBadge code={veh.code} size="big" /><Plate text={veh.plate} size="big" />
+          <div style={{ fontSize: 10.5, color: "#b0a691", fontWeight: 700, marginBottom: 1 }}>ทะเบียนรถ</div>
+          <Plate text={veh.plate} size="big" />
           {!veh.active && <span style={{ fontSize: 13, color: "#b4451f", marginLeft: 8 }}>(เลิกใช้งาน)</span>}
         </div>
+        {veh.code && (
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 10.5, color: "#b0a691", fontWeight: 700, marginBottom: 1 }}>รหัสรถ</div>
+            <span style={{ fontSize: 16 }}><CodeBadge code={veh.code} size="big" /></span>
+          </div>
+        )}
         <button style={S.btnGhost} onClick={onEdit}><Pencil size={15} /> แก้ไขข้อมูลรถ</button>
         <button style={S.btn} onClick={onAddRepair}><Plus size={17} /> บันทึกซ่อม</button>
       </div>
