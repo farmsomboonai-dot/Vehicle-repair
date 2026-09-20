@@ -138,6 +138,80 @@ function VehiclePhotos({ veh, onSaved }) {
   );
 }
 
+// ช่องรูปอะไหล่ที่เสีย (ใช้ในการซ่อม) — 4 มุมเหมือนรูปรถ
+function RepairPhotos({ repair, onSaved, vehId }) {
+  const [busy, setBusy] = useState("");
+  const [photos, setPhotos] = useState({});
+
+  if (!repair.id) return <div style={{ ...S.card, color: "#9b917f", textAlign: "center" }}>บันทึกการซ่อมก่อนเพื่ออัปโหลดรูปอะไหล่</div>;
+
+  async function upload(slot, file) {
+    if (!file) return;
+    setBusy(slot);
+    try {
+      const blob = await shrinkImage(file);
+      const path = vehId + "/repair_" + repair.id + "/" + slot + ".jpg";
+      const up = await supabase.storage.from("vehicle-photos").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+      if (up.error) throw up.error;
+      const { data } = supabase.storage.from("vehicle-photos").getPublicUrl(path);
+      const url = data.publicUrl + "?v=" + Date.now();
+      setPhotos({ ...photos, [slot]: url });
+      await onSaved();
+    } catch (e) { alert("อัปโหลดรูปไม่สำเร็จ: " + (e.message || e)); }
+    setBusy("");
+  }
+  async function removePhoto(slot) {
+    if (!confirm("ลบรูปนี้?")) return;
+    setBusy(slot);
+    try {
+      await supabase.storage.from("vehicle-photos").remove([vehId + "/repair_" + repair.id + "/" + slot + ".jpg"]);
+      const newPhotos = { ...photos };
+      delete newPhotos[slot];
+      setPhotos(newPhotos);
+      await onSaved();
+    } catch (e) { alert("ลบรูปไม่สำเร็จ: " + (e.message || e)); }
+    setBusy("");
+  }
+
+  return (
+    <div style={S.card}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#9b917f", marginBottom: 8 }}>🔧 รูปอะไหล่ที่เสีย (4 มุม)</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
+        {PHOTO_SLOTS.map(([slot, label, icon]) => {
+          const url = photos[slot];
+          return (
+            <div key={slot} style={{ position: "relative" }}>
+              {url ? (
+                <>
+                  <img src={url} alt={label} onClick={() => window.open(url.split("?")[0], "_blank")}
+                    style={{ width: "100%", height: 110, objectFit: "cover", borderRadius: 10, border: "1px solid #e5dbc9", cursor: "zoom-in", display: "block", opacity: busy === slot ? .4 : 1 }} />
+                  <span style={{ position: "absolute", top: 6, left: 6, background: "rgba(60,50,35,.75)", color: "#fff", borderRadius: 6, padding: "1px 8px", fontSize: 12, fontWeight: 700 }}>{label}</span>
+                  <label style={{ position: "absolute", bottom: 6, right: 6, background: "rgba(255,255,255,.92)", borderRadius: 7, padding: "2px 8px", fontSize: 12, fontWeight: 700, color: "#7a6f5c", cursor: "pointer", border: "1px solid #e5dbc9" }}>
+                    เปลี่ยน
+                    <input type="file" accept="image/*" style={{ display: "none" }}
+                      onChange={(e) => { upload(slot, e.target.files[0]); e.target.value = ""; }} />
+                  </label>
+                  <button onClick={() => removePhoto(slot)}
+                    style={{ position: "absolute", bottom: 6, left: 6, background: "rgba(255,255,255,.92)", borderRadius: 7, padding: "2px 8px", fontSize: 12, fontWeight: 700, color: "#b4451f", cursor: "pointer", border: "1px solid #e5dbc9" }}>ลบ</button>
+                </>
+              ) : (
+                <label style={{ display: "grid", placeItems: "center", height: 110, borderRadius: 10, border: "2px dashed #e0d5c0", color: "#b0a691", cursor: "pointer", background: "#fdfaf4", textAlign: "center" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+                    <div style={{ fontSize: 22 }}>{busy === slot ? "⏳" : icon}</div>
+                    {busy === slot ? "กำลังอัปโหลด…" : "+ รูปด้าน" + label}
+                  </div>
+                  <input type="file" accept="image/*" style={{ display: "none" }}
+                    onChange={(e) => { upload(slot, e.target.files[0]); e.target.value = ""; }} />
+                </label>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // 🚗 กรอบป้ายทะเบียน — โชว์เฉพาะส่วนเลขทะเบียนในกรอบ ข้อความอื่น (วงเล็บ/คำอธิบาย) อยู่นอกกรอบ
 function Plate({ text, size }) {
   if (!text) return null;
@@ -282,10 +356,17 @@ function App() {
     row.cost = Number(row.cost) || 0;
     row.mileage = row.mileage ? Number(row.mileage) : null;
     let res;
-    if (row.id) res = await supabase.from("vehicle_repairs").update(row).eq("id", row.id);
-    else { delete row.id; res = await supabase.from("vehicle_repairs").insert(row); }
-    if (res.error) { alert("บันทึกไม่สำเร็จ: " + res.error.message); return false; }
-    setShowRepForm(null); await loadAll(); return true;
+    if (row.id) {
+      res = await supabase.from("vehicle_repairs").update(row).eq("id", row.id);
+      if (res.error) { alert("บันทึกไม่สำเร็จ: " + res.error.message); return false; }
+      return { ...row, id: row.id }; // return ที่มี id สำหรับ RepairPhotos
+    } else {
+      delete row.id;
+      res = await supabase.from("vehicle_repairs").insert([row]).select();
+      if (res.error) { alert("บันทึกไม่สำเร็จ: " + res.error.message); return false; }
+      if (!res.data || res.data.length === 0) { alert("บันทึกไม่สำเร็จ: ไม่มีข้อมูลกลับมา"); return false; }
+      return res.data[0]; // return repair object ที่มี id
+    }
   }
   async function delRepair(r) {
     if (!confirm("ลบรายการซ่อมนี้? (" + (r.parts || "") + ")")) return;
@@ -361,7 +442,7 @@ function App() {
       {/* ฟอร์ม */}
       {showVehForm !== null && <VehicleForm init={showVehForm} onSave={saveVehicle} onClose={() => setShowVehForm(null)} />}
       {showRepForm !== null && <RepairForm init={showRepForm} vehicles={vehicles.filter((v) => v.active)} vehLabel={vehLabel}
-        repairsByVeh={repairsByVeh} onSave={saveRepair} onClose={() => setShowRepForm(null)} />}
+        repairsByVeh={repairsByVeh} onSave={saveRepair} onClose={() => { setShowRepForm(null); loadAll(); }} />}
     </div>
   );
 }
@@ -649,6 +730,32 @@ function PriceText({ text }) {
     ));
 }
 
+// ชิพรูปอะไหล่ ที่ซ่อมที่ผ่านมา — ลืมใจให้ onError ทั่วไป (เพราะอาจไม่มีรูป)
+function RepairPhotoPreview({ r, vehId }) {
+  const [photos, setPhotos] = useState([]);
+  useEffect(() => {
+    if (!r.id) return;
+    const p = [];
+    for (const [slot] of PHOTO_SLOTS) {
+      const path = vehId + "/repair_" + r.id + "/" + slot + ".jpg";
+      const { data } = supabase.storage.from("vehicle-photos").getPublicUrl(path);
+      p.push(data.publicUrl + "?v=" + Date.now());
+    }
+    setPhotos(p);
+  }, [r.id, vehId]);
+
+  if (photos.length === 0) return null;
+  return (
+    <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+      {photos.map((url, i) => (
+        <img key={i} src={url} alt="ซ่อม" onError={() => {}}
+          onClick={() => window.open(url.split("?")[0], "_blank")}
+          style={{ width: 50, height: 50, borderRadius: 8, border: "1px solid #e5dbc9", objectFit: "cover", cursor: "zoom-in" }} />
+      ))}
+    </div>
+  );
+}
+
 function RepairRow({ r, repeatPrev, veh, showVeh, onEdit, onDel, onOpenVeh }) {
   return (
     <div style={{ ...S.card, borderLeft: r.status === "pending" ? "4px solid #E8943A" : repeatPrev ? "4px solid #d9534f" : "4px solid #dfd6c4" }}>
@@ -673,6 +780,7 @@ function RepairRow({ r, repeatPrev, veh, showVeh, onEdit, onDel, onOpenVeh }) {
             {r.garage ? "อู่: " + r.garage : ""}
             {r.notes ? " · " + r.notes : ""}
           </div>
+          {veh && <RepairPhotoPreview r={r} vehId={veh.id} />}
           {repeatPrev && (
             <div style={{ background: "#fdecea", color: "#b4451f", borderRadius: 8, padding: "6px 10px", fontSize: 13, marginTop: 6 }}>
               ⚠️ <b>ซ่อมซ้ำ!</b> หมวด "{r.category}" เคยซ่อมใน 6 เดือน: {repeatPrev.map((p) => fmtDate(p.repair_date) + " (" + p.parts + (p.cause ? " — " + p.cause : "") + ")").join(" · ")}
@@ -937,7 +1045,7 @@ function VehicleForm({ init, onSave, onClose }) {
 }
 
 // ============================================================
-// ฟอร์ม: บันทึกซ่อม
+// ฟอร์ม: บันทึกซ่อม (2 ขั้นตอน: ข้อมูล + รูป)
 // ============================================================
 function RepairForm({ init, vehicles, vehLabel, repairsByVeh, onSave, onClose }) {
   const [f, setF] = useState({
@@ -948,9 +1056,34 @@ function RepairForm({ init, vehicles, vehLabel, repairsByVeh, onSave, onClose })
   });
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const [saving, setSaving] = useState(false);
+  const [savedRepair, setSavedRepair] = useState(null); // repair ที่บันทึกสำเร็จ (มี id)
 
   // 💡 โชว์ประวัติหมวดเดียวกันของรถคันนี้ทันทีตอนกรอก — เห็นเลยว่าเคยซ่อมเรื่องนี้มาก่อนไหม
   const history = (repairsByVeh[f.vehicle_id] || []).filter((r) => r.id !== f.id && (!f.category || r.category === f.category)).slice(0, 5);
+
+  async function handleSave() {
+    setSaving(true);
+    const result = await onSave(f);
+    if (result && result.id) {
+      setSavedRepair(result); // เก็บ repair ที่บันทึกได้ (มี id)
+    }
+    setSaving(false);
+  }
+
+  // ถ้าบันทึกสำเร็จ แสดง RepairPhotos เพื่ออัปโหลดรูปอะไหล่
+  if (savedRepair) {
+    return (
+      <Modal title="เพิ่มรูปอะไหล่ที่เสีย (ถ้ามี)" onClose={onClose}>
+        <RepairPhotos repair={savedRepair} vehId={f.vehicle_id} onSaved={async () => await onSave(savedRepair)} />
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 14 }}>
+          <button style={S.btnGhost} onClick={onClose}>เสร็จแล้ว</button>
+          <button style={S.btn} onClick={() => { setSavedRepair(null); setF({ id: null, vehicle_id: f.vehicle_id, repair_date: todayStr(), mileage: "", category: "", parts: "", cause: "", garage: "", cost: "", status: "done", notes: "" }); }}>
+            + บันทึกซ่อมอื่น
+          </button>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal title={f.id ? "แก้ไขรายการซ่อม" : "บันทึกซ่อมใหม่"} onClose={onClose}>
@@ -1000,8 +1133,8 @@ function RepairForm({ init, vehicles, vehLabel, repairsByVeh, onSave, onClose })
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 6 }}>
         <button style={S.btnGhost} onClick={onClose}>ยกเลิก</button>
         <button style={{ ...S.btn, opacity: saving || !f.vehicle_id || !f.parts.trim() ? .5 : 1 }} disabled={saving || !f.vehicle_id || !f.parts.trim()}
-          onClick={async () => { setSaving(true); const ok = await onSave(f); if (!ok) setSaving(false); }}>
-          บันทึก
+          onClick={handleSave}>
+          บันทึก {f.id ? "การเปลี่ยนแปลง" : "แล้ว ← เพิ่มรูปอะไหล่ต่อไป"}
         </button>
       </div>
     </Modal>
