@@ -212,6 +212,15 @@ function RepairPhotos({ repair, onSaved, vehId }) {
   );
 }
 
+// 🔎 ค้นหาแบบไม่สนช่องว่าง/ขีด — พิมพ์ "825985" หา "82 - 5985 รบ" เจอ
+const searchKey = (s) => (s || "").toLowerCase().replace(/[^0-9a-zก-๙]/g, "");
+// แยกคำด้วยช่องว่าง ทุกคำต้องเจอ (พิมพ์ "82 5985" หรือ "825985" ก็ได้)
+function matchSearch(q, text) {
+  const hay = (text || "").toLowerCase(), hayKey = searchKey(text);
+  return q.toLowerCase().split(/\s+/).filter(Boolean)
+    .every((t) => hay.includes(t) || (searchKey(t) && hayKey.includes(searchKey(t))));
+}
+
 // 🚗 กรอบป้ายทะเบียน — โชว์เฉพาะส่วนเลขทะเบียนในกรอบ ข้อความอื่น (วงเล็บ/คำอธิบาย) อยู่นอกกรอบ
 function Plate({ text, size }) {
   if (!text) return null;
@@ -462,8 +471,8 @@ function FleetTab({ vehicles, repairsByVeh, q, setQ, onOpen, onAdd }) {
     if (farm !== "all" && v.farm !== farm) return false;
     if (!q) return true;
     const s = (v.code + " " + v.plate + " " + (v.name || "") + " " + (v.brand || "") + " " + (v.model || "") + " " +
-      (v.vin || "") + " " + (v.owner_name || "") + " " + (v.vgroup || "") + " " + (v.farm || "")).toLowerCase();
-    return s.includes(q.toLowerCase());
+      (v.vin || "") + " " + (v.owner_name || "") + " " + (v.vgroup || "") + " " + (v.farm || ""));
+    return matchSearch(q, s);
   });
   const active = list.filter((v) => v.active), inactive = list.filter((v) => !v.active);
 
@@ -809,8 +818,9 @@ function RepairsTab({ repairs, vehById, vehLabel, repeatFlags, onAdd, onEdit, on
     if (cat !== "all" && (r.category || "อื่นๆ") !== cat) return false;
     if (!q) return true;
     const v = vehById[r.vehicle_id];
-    const s = ((v ? vehLabel(v) : "") + " " + (r.parts || "") + " " + (r.cause || "") + " " + (r.garage || "")).toLowerCase();
-    return s.includes(q.toLowerCase());
+    const s = ((v ? vehLabel(v) : "") + " " + (v ? v.plate || "" : "") + " " +
+      (r.parts || "") + " " + (r.cause || "") + " " + (r.garage || ""));
+    return matchSearch(q, s);
   });
   const repeatCount = list.filter((r) => repeatFlags[r.id]).length;
 
